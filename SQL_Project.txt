@@ -1,0 +1,345 @@
+
+
+/*
+CREATING Schema,Tables and then Inserting required Data for our case Study,
+Using DATA DEFINATION LANGUAGE Cammands.
+*/
+
+CREATE SCHEMA dannys_dinner;
+GO
+
+CREATE TABLE sales (
+  "customer_id" VARCHAR(1),
+  "order_date" DATE,
+  "product_id" INTEGER
+);
+
+INSERT INTO sales
+  ("customer_id", "order_date", "product_id")
+VALUES
+  ('A', '2021-01-01', '1'),
+  ('A', '2021-01-01', '2'),
+  ('A', '2021-01-07', '2'),
+  ('A', '2021-01-10', '3'),
+  ('A', '2021-01-11', '3'),
+  ('A', '2021-01-11', '3'),
+  ('B', '2021-01-01', '2'),
+  ('B', '2021-01-02', '2'),
+  ('B', '2021-01-04', '1'),
+  ('B', '2021-01-11', '1'),
+  ('B', '2021-01-16', '3'),
+  ('B', '2021-02-01', '3'),
+  ('C', '2021-01-01', '3'),
+  ('C', '2021-01-01', '3'),
+  ('C', '2021-01-07', '3');
+ 
+
+CREATE TABLE menu (
+  "product_id" INTEGER,
+  "product_name" VARCHAR(5),
+  "price" INTEGER
+);
+
+INSERT INTO menu
+  ("product_id", "product_name", "price")
+VALUES
+  ('1', 'sushi', '10'),
+  ('2', 'curry', '15'),
+  ('3', 'ramen', '12');
+  
+
+CREATE TABLE members (
+  "customer_id" VARCHAR(1),
+  "join_date" DATE
+);
+
+INSERT INTO members
+  ("customer_id", "join_date")
+VALUES
+  ('A', '2021-01-07'),
+  ('B', '2021-01-09')
+  ;
+
+
+/* --------------------
+   Case Study Questions
+   --------------------*/
+
+-- 1. What is the total amount each customer spent at the restaurant?
+-- 2. How many days has each customer visited the restaurant?
+-- 3. What was the first item from the menu purchased by each customer?
+-- 4. What is the most purchased item on the menu and how many times was it purchased by all customers?
+-- 5. Which item was the most popular for each customer?
+-- 6. Which item was purchased first by the customer after they became a member?
+-- 7. Which item was purchased just before the customer became a member?
+-- 8. What is the total items and amount spent by each member before they became a member?
+-- 9.  If each $1 spent equates to 10 points and sushi has a 2x points multiplier - how many points would each customer have?
+-- 10. In the first week after a customer joins the program (including their join date)
+--	   they earn 2x points on all items, not just sushi - how many points do customer A and B have at the end of January?
+
+
+-- Solution Query Using DATA MANIPULATING LANGUAGE Cammands....:
+
+
+SELECT *
+FROM dbo.sales,
+dbo.menu,
+dbo.members;
+
+create view customer_data as
+(Select sales.customer_id,
+sales.order_date,
+sales.product_id,
+menu.product_id,menu.product_name,
+menu.price,
+members.join_date
+From sales,menu,members)
+
+
+Select * From customer_data;
+
+
+-- 1. What is the total amount each customer spent at the restaurant?
+
+
+Select sales.customer_id,
+sum(menu.price) As amount_spent 
+From sales
+Left join menu 
+On sales.product_id = menu.product_id
+Group by sales.customer_id
+;
+
+
+
+-- 2. How many days has each customer visited the restaurant?
+
+
+Select sales.customer_id,
+count(distinct order_date) as Visits
+from dbo.sales
+Group by customer_id
+;
+
+
+-- 3. What was the first item from the menu purchased by each customer?
+
+
+With new_table as (
+Select 
+sales.customer_id,
+menu.product_name,
+sales.order_date,
+row_number() 
+	over(partition by sales.customer_id order by sales.order_date)as row_num
+From dbo.sales
+Left join dbo.menu 
+On sales.product_id = menu.product_id
+)
+select 
+customer_id,
+product_name
+from new_table
+where row_num = 1
+;
+
+-- 4. What is the most purchased item on the menu and how many times was it purchased by all customers?
+
+
+with table0 as
+(
+Select sales.customer_id,menu.product_name,
+Count(sales.product_id) As orders
+From dbo.sales
+Left Join dbo.menu
+On sales.product_id = menu.product_id
+Group by menu.product_name,sales.customer_id
+),
+ table1 AS
+(
+select product_name,
+sum(orders) as total_orders
+from 
+table0
+group by product_name
+), 
+table2 as
+(
+select product_name
+from table1
+where total_orders = (select max(total_orders) from table1)
+)
+select t0.customer_id,t2.product_name as most_purchased_item,t0.orders from table2 as t2
+join table0 as t0 on
+t2.product_name = t0.product_name
+;
+
+
+
+
+-- 5. Which item was the most popular for each customer?
+
+
+WITH table1 AS
+(
+Select sales.customer_id,
+menu.product_name,
+Count(product_name) As repeated
+From dbo.sales
+Left Join dbo.menu
+On sales.product_id = menu.product_id
+Group by product_name,customer_id
+),
+table2 As 
+(
+Select customer_id,
+product_name,
+repeated,
+ROW_NUMBER()
+	Over(partition by customer_id Order by repeated Desc) As row_no
+From table1
+)
+Select
+customer_id,
+product_name,
+repeated AS most_popular
+From table2
+Where row_no = 1
+;
+
+
+
+-- 6. Which item was purchased first by the customer after they became a member?
+
+
+with table1 as
+(
+select sales.customer_id,sales.order_date,members.join_date,menu.product_name from dbo.sales 
+left join dbo.menu 
+on sales.product_id = menu.product_id
+left join dbo.members 
+on sales.customer_id = members.customer_id
+),
+table2 As 
+(
+select customer_id,
+product_name,order_date,
+join_date,
+row_number()
+	over(partition by customer_id order by order_date) as row_num
+from table1
+where order_date > join_date
+)
+select customer_id,
+product_name,
+order_date,
+join_date
+from table2
+where row_num = 1
+;
+
+
+-- 7. Which item was purchased just before the customer became a member?
+
+with table1 as
+(
+select sales.customer_id,sales.order_date,members.join_date,menu.product_name from dbo.sales 
+left join dbo.menu 
+on sales.product_id = menu.product_id
+left join dbo.members 
+on sales.customer_id = members.customer_id
+),
+table2 as 
+(
+select customer_id,product_name,order_date,join_date,
+row_number()
+	over(partition by customer_id order by order_date desc) as row_num
+from table1
+where order_date < join_date
+)
+select customer_id,product_name,order_date,join_date
+from table2
+where row_num = 1
+;
+
+
+
+-- 8. What is the total items and amount spent by each member before they became a member?
+
+
+with new_tab as
+(
+select sales.customer_id,sales.order_date,members.join_date,menu.product_name,menu.price 
+from dbo.sales 
+left join dbo.menu 
+on sales.product_id = menu.product_id
+left join dbo.members 
+on sales.customer_id = members.customer_id
+)
+select customer_id,
+count(product_name) as total_items,
+sum(price) as total_amt_spent
+from new_tab
+where order_date < join_date
+group by customer_id
+;
+
+
+-- 9. If each $1 spent equates to 10 points and sushi has a 2x points multiplier 
+--	  how many points would each customer have?
+
+
+with table1 as
+(
+select sales.customer_id,sales.product_id,menu.product_name,menu.price from dbo.sales
+left join dbo.menu
+on sales.product_id = menu.product_id
+),
+table2 as
+(
+select customer_id,
+case
+	when product_name = 'sushi' then price*20
+	else price*10
+end as points
+from table1
+)
+select customer_id,
+sum(points) as Total_points
+from table2
+group by customer_id
+;
+
+-- 10. In the first week after a customer joins the program (including their join date)
+--		they earn 2x points on all items not just 'sushi',
+--		how many points do customer A and B have at the end of 'January'?
+
+
+with table1 as
+(
+--joining the tables
+select sales.customer_id,sales.order_date,members.join_date,menu.product_name,menu.price,
+DATEADD(day, 7, join_date) AS New_date
+from dbo.sales 
+left join dbo.menu 
+on sales.product_id = menu.product_id
+left join dbo.members 
+on sales.customer_id = members.customer_id
+),
+table2 as
+(
+select customer_id,
+case 
+	when product_name = 'sushi' then price*20
+	when order_date between join_date and New_date then price*20
+	else price*10
+end as points
+from table1
+)
+select customer_id,
+sum(points) as Total_points
+from table2
+group by customer_id
+;
+
+
