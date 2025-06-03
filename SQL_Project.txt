@@ -1,5 +1,4 @@
 
-
 /*
 CREATING Schema,Tables and then Inserting required Data for our case Study,
 Using DATA DEFINATION LANGUAGE Cammands.
